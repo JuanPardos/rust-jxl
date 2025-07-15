@@ -74,7 +74,7 @@ Default: 6.
 
 ## Notes
 
--This program never overwrites your original images, all compressed files are saved in a separate `output` folder.
--JPEG XL format is not widely supported. You may run into issues, I recommend using this as a storage tool. You should be able to recover the original format using other tools.  
--Support for alpha channel (transparency) might be broken, you will probably lose the transparency and get a black background instead.
+- This program never overwrites your original images, all compressed files are saved in a separate `output` folder.  
+- JPEG XL format is not widely supported. You may run into issues, I recommend using this as a storage tool. You should be able to recover the original format using other tools.  
+- Support for alpha channel (transparency) might be broken, you will probably lose the transparency and get a black background instead.
 
