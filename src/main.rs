@@ -18,10 +18,17 @@ fn main() {
     let images = retrieve_images(&options[0]);
     let mut exit = String::new();
     create_output_folder();
+    let lossless = options[3] == "true";
+
     for (index, i) in images.iter().enumerate() {
         println!("Compressing image: {} of {}", index + 1, images.len());
-        compress_image(&i, options[1].parse::<f32>().expect("Invalid quality value"), options[2].parse::<u8>().expect("Invalid effort value"));
+        if lossless {
+            compress_image(&i, 0.0, 0, true);
+        } else {
+            compress_image(&i, options[1].parse::<f32>().expect("Invalid quality value"), options[2].parse::<u8>().expect("Invalid effort value"), false);
+        }
     }
+
     println!("\nProcess completed. Check the 'output' folder.");
     stdin().read_line(&mut exit).unwrap();
 }
@@ -30,14 +37,15 @@ fn main_menu() -> Vec<String> {
     let mut path = String::new();
     let mut quality = String::new();
     let mut effort = String::new();
+    let mut lossless = String::new();
+    let mut options = Vec::new();
 
     println!("===============================================");
     println!("=        JPEG XL Image Compression Tool       =");
     println!("===============================================");
     println!("This program allows you to compress images to JPEG XL (.jxl) format.");
     println!("Supported formats: PNG, JPG, JPEG, WEBP.");
-    println!("You can adjust compression quality and effort (speed).");
-    println!("-----------------------------------------------");
+    println!("You can use lossless mode or configure it yourself.");
 
     println!("1. Enter the folder path containing images:");
     println!("   Example: /home/juan/pictures/");
@@ -45,25 +53,44 @@ fn main_menu() -> Vec<String> {
     stdout().flush().unwrap();
     stdin().read_line(&mut path).expect("Failed to read input");
 
-    println!("\n2. Enter desired quality (0.0-15.0)");
-    println!("   Lower value = higher quality and larger files. Recommended: 0.5-4.0 || Default: {DEFAULT_QUALITY}");
+    println!("\n2. Do you want to use lossless mode? (y/N)");
     print!("   > ");
     stdout().flush().unwrap();
-    stdin().read_line(&mut quality).expect("Failed to read input");
+    stdin().read_line(&mut lossless).expect("Failed to read input");
 
-    println!("\n3. Enter compression effort (1-10)");
-    println!("   Lower value = faster but worse compression. Recommended: 3-9 || Default: {DEFAULT_EFFORT}");
-    print!("   > ");
-    stdout().flush().unwrap();
-    stdin().read_line(&mut effort).expect("Failed to read input");
+    lossless = lossless.trim().to_lowercase();
+    let use_lossless = if lossless.is_empty() { false } else { lossless == "y" };
 
-    path = path.trim().to_string();
-    let quality = if quality.trim().is_empty() { DEFAULT_QUALITY.to_string() } else { quality.trim().to_string() };
-    let effort = if effort.trim().is_empty() { DEFAULT_EFFORT.to_string() } else { effort.trim().to_string() };
+    if use_lossless {
+        options.push(path.trim().to_string());
+        options.push(String::new());
+        options.push(String::new());
+        options.push("true".to_string());
+    } else {
+        println!("\n3. Enter desired quality (0.0-15.0)");
+        println!("   Lower value = higher quality and larger files. Recommended: 0.5-4.0 || Default: {DEFAULT_QUALITY}");
+        print!("   > ");
+        stdout().flush().unwrap();
+        stdin().read_line(&mut quality).expect("Failed to read input");
+    
+        println!("\n4. Enter compression effort (1-10)");
+        println!("   Lower value = faster but worse compression. Recommended: 3-9 || Default: {DEFAULT_EFFORT}");
+        print!("   > ");
+        stdout().flush().unwrap();
+        stdin().read_line(&mut effort).expect("Failed to read input");
+    
+        path = path.trim().to_string();
+        quality = if quality.trim().is_empty() { DEFAULT_QUALITY.to_string() } else { quality.trim().to_string() };
+        effort = if effort.trim().is_empty() { DEFAULT_EFFORT.to_string() } else { effort.trim().to_string() };
+
+        options.push(path);
+        options.push(quality);
+        options.push(effort);
+        options.push("false".to_string());
+    }
 
     println!("\nStarting compression...\n");
-
-    vec![path, quality, effort]
+    options
 }
 
 fn retrieve_images(path: &str) -> Vec<PathBuf> {
@@ -80,6 +107,7 @@ fn retrieve_images(path: &str) -> Vec<PathBuf> {
             }
         }
     }
+
     println!("{} images found. \n", images_path.len());
     images_path
 }
@@ -89,7 +117,7 @@ fn create_output_folder() {
     create_dir_all(&output_path).expect("Failed to create output directory");
 }
 
-fn compress_image(image_path: &Path, quality: f32, speed: u8) {
+fn compress_image(image_path: &Path, quality: f32, speed: u8, lossless: bool) {
     let img = ImageReader::open(image_path)
         .expect("Failed to open image")
         .with_guessed_format()
@@ -114,21 +142,23 @@ fn compress_image(image_path: &Path, quality: f32, speed: u8) {
     };
 
     let threads_runner = ThreadsRunner::default();
-
-    //TODO: Lossless compression
-    let mut encoder = encoder_builder()
+    let mut base_builder = encoder_builder();
+    let builder = base_builder
         .quality(quality)
         .speed(encoder_speed)
-        .lossless(false)
-        .parallel_runner(&threads_runner)
-        .build()
-        .expect("Failed to build encoder");
+        .lossless(lossless)
+        .parallel_runner(&threads_runner);
+
+    if lossless {
+        builder.uses_original_profile(true);
+    }
+
+    let mut encoder = builder.build().expect("Failed to build encoder");
 
     let file_stem = image_path.file_stem().unwrap().to_string_lossy();
     let output_path = Path::new("output").join(format!("{}.jxl", file_stem));
 
     let buffer = match img.color() {
-        //TODO: Alpha channel support (RGBA, transparency)
         ColorType::Rgb8 | ColorType::Rgba8 => {
             let rgb = img.to_rgb8();
             let pixels: Vec<u8> = rgb.pixels().flat_map(|p| p.0.iter().copied()).collect();
