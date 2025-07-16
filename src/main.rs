@@ -7,6 +7,7 @@ use jpegxl_rs::encoder_builder;
 use std::path::{Path, PathBuf};
 use image::ColorType;
 use glob::glob;
+use std::fs;
 
 const FILE_MASK: [&str; 4] = ["png", "jpg", "jpeg", "webp"];
 const DEFAULT_QUALITY: f32 = 1.5;
@@ -19,16 +20,19 @@ fn main() {
     let mut exit = String::new();
     create_output_folder();
     let lossless = options[3] == "true";
+    let mut images_skipped = false;
 
     for (index, i) in images.iter().enumerate() {
         println!("Compressing image: {} of {}", index + 1, images.len());
         if lossless {
-            compress_image(&i, 0.0, 0, true);
+            images_skipped = compress_image(&i, 0.0, 0, true);
         } else {
-            compress_image(&i, options[1].parse::<f32>().expect("Invalid quality value"), options[2].parse::<u8>().expect("Invalid effort value"), false);
+            images_skipped = compress_image(&i, options[1].parse::<f32>().expect("Invalid quality value"), options[2].parse::<u8>().expect("Invalid effort value"), false);
         }
     }
-
+    if images_skipped {
+        println!("\nWARNING: Some images were not processed because the compressed file was larger than the original or other issues occurred. These were copied to the output folder.");
+    } 
     println!("\nProcess completed. Check the 'output' folder.");
     stdin().read_line(&mut exit).unwrap();
 }
@@ -45,7 +49,7 @@ fn main_menu() -> Vec<String> {
     println!("===============================================");
     println!("This program allows you to compress images to JPEG XL (.jxl) format.");
     println!("Supported formats: PNG, JPG, JPEG, WEBP.");
-    println!("You can use lossless mode or configure it yourself.\n");
+    println!("You can configure it yourself or use lossless mode.\n");
 
     println!("1. Enter the folder path containing images:");
     println!("   Example: /home/juan/pictures/");
@@ -53,20 +57,14 @@ fn main_menu() -> Vec<String> {
     stdout().flush().unwrap();
     stdin().read_line(&mut path).expect("Failed to read input");
 
-    println!("\n2. Do you want to use lossless mode? (y/N)");
+    println!("\n2. Do you want to use lossy compression? [y=Lossy(default), n=Lossless]");
     print!("   > ");
     stdout().flush().unwrap();
     stdin().read_line(&mut lossless).expect("Failed to read input");
-
     lossless = lossless.trim().to_lowercase();
-    let use_lossless = if lossless.is_empty() { false } else { lossless == "y" };
+    let use_lossy = lossless.is_empty() || lossless == "y";
 
-    if use_lossless {
-        options.push(path.trim().to_string());
-        options.push(String::new());
-        options.push(String::new());
-        options.push("true".to_string());
-    } else {
+    if use_lossy {
         println!("\n3. Enter desired quality (0.0-15.0)");
         println!("   Lower value = higher quality and larger files. Recommended: 0.5-4.0 || Default: {DEFAULT_QUALITY}");
         print!("   > ");
@@ -87,6 +85,11 @@ fn main_menu() -> Vec<String> {
         options.push(quality);
         options.push(effort);
         options.push("false".to_string());
+    } else {
+        options.push(path.trim().to_string());
+        options.push(String::new());
+        options.push(String::new());
+        options.push("true".to_string());
     }
 
     println!("\nStarting compression...\n");
@@ -117,7 +120,8 @@ fn create_output_folder() {
     create_dir_all(&output_path).expect("Failed to create output directory");
 }
 
-fn compress_image(image_path: &Path, quality: f32, speed: u8, lossless: bool) {
+fn compress_image(image_path: &Path, quality: f32, speed: u8, lossless: bool) -> bool {
+    let mut skipped = false;
     let img = ImageReader::open(image_path)
         .expect("Failed to open image")
         .with_guessed_format()
@@ -174,10 +178,24 @@ fn compress_image(image_path: &Path, quality: f32, speed: u8, lossless: bool) {
             encoded.as_ref().to_vec()
         }
         _ => {
-            println!("Unsupported color type for image: {:?}", img.color());
-            return;
+            let ext = image_path.extension().and_then(|e| e.to_str()).unwrap_or("img");
+            let file_stem = image_path.file_stem().unwrap().to_string_lossy();
+            let original_output = Path::new("output").join(format!("{}.{}", file_stem, ext));
+            fs::copy(image_path, &original_output).expect("Failed to copy file");
+            return true; 
         }
     };
 
-    write(&output_path, &buffer).expect("Failed to write JXL file");
+    let original_size = fs::metadata(image_path).map(|m| m.len()).unwrap_or(0);
+    let compressed_size = buffer.len() as u64;
+
+    if compressed_size >= original_size {
+        skipped = true;
+        let ext = image_path.extension().and_then(|e| e.to_str()).unwrap_or("img");
+        let original_output = Path::new("output").join(format!("{}.{}", file_stem, ext));
+        fs::copy(image_path, &original_output).expect("Failed to copy file");
+    } else {
+        write(&output_path, &buffer).expect("Failed to write JXL file");
+    }
+    skipped
 }
