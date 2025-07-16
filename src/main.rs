@@ -45,7 +45,7 @@ fn main_menu() -> Vec<String> {
     println!("===============================================");
     println!("This program allows you to compress images to JPEG XL (.jxl) format.");
     println!("Supported formats: PNG, JPG, JPEG, WEBP.");
-    println!("You can use lossless mode or configure it yourself.");
+    println!("You can use lossless mode or configure it yourself.\n");
 
     println!("1. Enter the folder path containing images:");
     println!("   Example: /home/juan/pictures/");
