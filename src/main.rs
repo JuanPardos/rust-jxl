@@ -19,30 +19,52 @@ fn main() {
     let images = retrieve_images(&options[0]);
     let mut exit = String::new();
     create_output_folder();
-    let lossless = options[3] == "true";
-    let mut images_skipped = false;
+    let lossy = options[3].parse::<bool>().unwrap_or(true);
+    let mut skipped = false;
 
     for (index, i) in images.iter().enumerate() {
-        println!("Compressing image: {} of {}", index + 1, images.len());
-        if lossless {
-            images_skipped = compress_image(&i, 0.0, 0, true);
+        let file_name = i.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        let original_size = fs::metadata(i).map(|m| m.len()).unwrap_or(0);
+
+        if lossy {
+            skipped = compress_image(&i, options[1].parse::<u8>().expect("Invalid effort value"), options[2].parse::<f32>().expect("Invalid quality value"), lossy);
         } else {
-            images_skipped = compress_image(&i, options[1].parse::<f32>().expect("Invalid quality value"), options[2].parse::<u8>().expect("Invalid effort value"), false);
+            skipped = compress_image(&i, options[1].parse::<u8>().expect("Invalid effort value"), 0.0, lossy);
+        }
+
+        let file_stem = i.file_stem().unwrap().to_string_lossy();
+        let output_path = Path::new("output").join(format!("{}.jxl", file_stem));
+        let final_size = fs::metadata(&output_path).map(|m| m.len()).unwrap_or(0);
+
+        let percent = if original_size > 0 {
+            (final_size as f64 / original_size as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        if skipped {
+            println!("[{}/{}] SKIPPED {}", index + 1, images.len(), file_name);
+        } else {
+            println!("[{}/{}] ({:.2}%) {}", index + 1, images.len(), percent, file_name);
         }
     }
-    if images_skipped {
+
+    if skipped {
         println!("\nWARNING: Some images were not processed because the compressed file was larger than the original or other issues occurred. These were copied to the output folder.");
     } 
+
     println!("\nProcess completed. Check the 'output' folder.");
     stdin().read_line(&mut exit).unwrap();
 }
 
 fn main_menu() -> Vec<String> {
-    let mut path = String::new();
-    let mut quality = String::new();
-    let mut effort = String::new();
-    let mut lossless = String::new();
+    let mut input_path = String::new();
+    let mut input_quality = String::new();
+    let mut input_effort = String::new();
+    let mut input_lossy = String::new();
     let mut options = Vec::new();
+
+    let mut quality_val = String::new();
 
     println!("===============================================");
     println!("=        JPEG XL Image Compression Tool       =");
@@ -52,45 +74,37 @@ fn main_menu() -> Vec<String> {
     println!("You can configure it yourself or use lossless mode.\n");
 
     println!("1. Enter the folder path containing images:");
-    println!("   Example: /home/juan/pictures/");
+    println!(r##"   Example: /home/juan/pictures/  or  C:\Users\juan\Pictures\"##);
     print!("   > ");
     stdout().flush().unwrap();
-    stdin().read_line(&mut path).expect("Failed to read input");
+    stdin().read_line(&mut input_path).expect("Failed to read input");
 
     println!("\n2. Do you want to use lossy compression? [y=Lossy(default), n=Lossless]");
     print!("   > ");
     stdout().flush().unwrap();
-    stdin().read_line(&mut lossless).expect("Failed to read input");
-    lossless = lossless.trim().to_lowercase();
-    let use_lossy = lossless.is_empty() || lossless == "y";
+    stdin().read_line(&mut input_lossy).expect("Failed to read input");
+    let use_lossy = input_lossy.trim().is_empty() || input_lossy.trim().to_lowercase() == "y";
+
+    println!("\n3. Enter compression effort (1-10)");
+    println!("   Lower value = faster but worse compression. Recommended: 3-8 || Default: {DEFAULT_EFFORT}");
+    print!("   > ");
+    stdout().flush().unwrap();
+    stdin().read_line(&mut input_effort).expect("Failed to read input");
+    let effort_val = if input_effort.trim().is_empty() { DEFAULT_EFFORT.to_string() } else { input_effort.trim().to_string() };
 
     if use_lossy {
-        println!("\n3. Enter desired quality (0.0-15.0)");
+        println!("\n4. Enter desired quality (0.0-15.0)");
         println!("   Lower value = higher quality and larger files. Recommended: 0.5-4.0 || Default: {DEFAULT_QUALITY}");
         print!("   > ");
         stdout().flush().unwrap();
-        stdin().read_line(&mut quality).expect("Failed to read input");
-    
-        println!("\n4. Enter compression effort (1-10)");
-        println!("   Lower value = faster but worse compression. Recommended: 3-9 || Default: {DEFAULT_EFFORT}");
-        print!("   > ");
-        stdout().flush().unwrap();
-        stdin().read_line(&mut effort).expect("Failed to read input");
-    
-        path = path.trim().to_string();
-        quality = if quality.trim().is_empty() { DEFAULT_QUALITY.to_string() } else { quality.trim().to_string() };
-        effort = if effort.trim().is_empty() { DEFAULT_EFFORT.to_string() } else { effort.trim().to_string() };
-
-        options.push(path);
-        options.push(quality);
-        options.push(effort);
-        options.push("false".to_string());
-    } else {
-        options.push(path.trim().to_string());
-        options.push(String::new());
-        options.push(String::new());
-        options.push("true".to_string());
+        stdin().read_line(&mut input_quality).expect("Failed to read input");
+        quality_val = if input_quality.trim().is_empty() { DEFAULT_QUALITY.to_string() } else { input_quality.trim().to_string() };
     }
+
+    options.push(input_path.trim().to_string());
+    options.push(effort_val);
+    options.push(quality_val);
+    options.push(use_lossy.to_string());
 
     println!("\nStarting compression...\n");
     options
@@ -120,7 +134,7 @@ fn create_output_folder() {
     create_dir_all(&output_path).expect("Failed to create output directory");
 }
 
-fn compress_image(image_path: &Path, quality: f32, speed: u8, lossless: bool) -> bool {
+fn compress_image(image_path: &Path, effort: u8, quality: f32, lossy: bool) -> bool {
     let mut skipped = false;
     let img = ImageReader::open(image_path)
         .expect("Failed to open image")
@@ -131,7 +145,7 @@ fn compress_image(image_path: &Path, quality: f32, speed: u8, lossless: bool) ->
 
     let (width, height) = img.dimensions();
 
-    let encoder_speed = match speed {
+    let encoder_speed = match effort {
         1 => EncoderSpeed::Lightning,
         2 => EncoderSpeed::Thunder,
         3 => EncoderSpeed::Falcon,
@@ -148,12 +162,12 @@ fn compress_image(image_path: &Path, quality: f32, speed: u8, lossless: bool) ->
     let threads_runner = ThreadsRunner::default();
     let mut base_builder = encoder_builder();
     let builder = base_builder
-        .quality(quality)
         .speed(encoder_speed)
-        .lossless(lossless)
+        .quality(quality)
+        .lossless(!lossy)
         .parallel_runner(&threads_runner);
 
-    if lossless {
+    if !lossy {
         builder.uses_original_profile(true);
     }
 

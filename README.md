@@ -12,6 +12,7 @@ More info about JPEG XL: https://jpegxl.info/
 - Lossy compression: typically reduces file size to 20% (or less) of the original, with no noticeable loss in visual quality
 - Lossless mode available
 - Supports multiple input formats: PNG, JPG, JPEG, and WebP
+- Status report with compression ratio and progress
 - Configurable compression via quality and effort (speed). Tuned by default for a good balance of speed, quality and file size
 - Batch processing of all images in a directory
 - Rustacean speed with multi-thread support
@@ -66,14 +67,14 @@ Run the program and follow instructions:
 You will be prompted for:
 
 1. **Path to the images folder**: directory containing your images.
-2. **Do you want to use lossless mode?**: using lossless mode gives the best results (if you don't mind about file size), disables any choices.  
-Default N.
-3. **Quality (0.0-15.0)**: sets the quality. Lower values = Higher quality and larger files.  
+2. **Do you want to use lossy compression?**: default is lossy compression, select lossless for maximum quality (and size).  
+Default Y (Lossy).
+3. **Effort (1-10)**: determines the compression effort. Lower values = Faster but worse compression.  
+Recommended 3-8  
+Default: 6.
+4. **Quality (0.0-15.0)**: sets the quality. Lower values = Higher quality and larger files. Disabled if lossless. 
 Recommended 0.5-4.0  
 Default 1.5.
-4. **Effort (1-10)**: determines the compression effort. Lower values = Faster but worse compression.  
-Recommended 3-9  
-Default: 6.
 
 ## Notes
 
