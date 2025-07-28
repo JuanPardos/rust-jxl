@@ -1,4 +1,4 @@
-**rust-jxl** is a simple command-line utility written in Rust to convert and compress images into the high-efficiency JPEG XL format.
+**rust-jxl** is a command-line utility written in Rust for bidirectional conversion between JPEG XL and other image formats.
 
 Also check out the AVIF tool: https://github.com/JuanPardos/rust-image-compress
 
@@ -6,14 +6,23 @@ More info about JPEG XL: https://jpegxl.info/
 
 ## Features
 
+- Bidirectional conversion:
+  - **Compression**: Convert images (PNG, JPG, JPEG, WebP) to high-efficiency JPEG XL format
+  - **Decompression**: Convert JPEG XL images back to PNG format with optimization
 - Consider this an improved version of the AVIF tool (they say JPEG XL is faster and better ☝🤓)
 - Standalone program, libjxl is statically linked so there is no need to install it
 - Fully offline, no need to be ashamed of your anime wallpapers
-- Lossy compression: typically reduces file size to 20% (or less) of the original, with no noticeable loss in visual quality
-- Lossless mode available
-- Supports multiple input formats: PNG, JPG, JPEG, and WebP
+- **Compression features:**
+  - Lossy compression: typically reduces file size to 20% (or less) of the original, with no noticeable loss in visual quality
+  - Lossless mode available
+  - Configurable compression via quality and effort (speed). Tuned by default for a good balance of speed, quality and file size
+- **Decompression features:**
+  - Converts JXL images back to PNG format
+  - Automatic PNG optimization using Oxipng for smaller file sizes
+  - Supports all JXL color formats (RGB, RGBA, Grayscale) with automatic conversion to RGB PNG
+  - Warning about potential file size increase (JXL is more efficient than PNG)
+- Supports multiple input formats: PNG, JPG, JPEG, WebP (for compression), JXL (for decompression)
 - Status report with compression ratio and progress
-- Configurable compression via quality and effort (speed). Tuned by default for a good balance of speed, quality and file size
 - Batch processing of all images in a directory
 - Rustacean speed with multi-thread support
 - Tested on Linux and Windows
@@ -64,21 +73,36 @@ Run the program and follow instructions:
 ./rust-jxl
 ```
 
-You will be prompted for:
+### Conversion Modes
 
-1. **Path to the images folder**: directory containing your images.
+The program supports two conversion modes:
+
+#### 1. Compress images to JXL (default)
+You will be prompted for:
+1. **Path to the images folder**: directory containing your images (PNG, JPG, JPEG, WebP).
 2. **Do you want to use lossy compression?**: default is lossy compression, select lossless for maximum quality (and size).  
-Default Y (Lossy).
+   Default Y (Lossy).
 3. **Effort (1-10)**: determines the compression effort. Lower values = Faster but worse compression.  
-Recommended 3-8  
-Default: 6.
+   Recommended 3-8  
+   Default: 6.
 4. **Quality (0.0-15.0)**: sets the quality. Lower values = Higher quality and larger files. Disabled if lossless. 
-Recommended 0.5-4.0  
-Default 1.5.
+   Recommended 0.5-4.0  
+   Default 1.5.
+
+#### 2. Convert JXL to PNG
+You will be prompted for:
+1. **Path to the JXL folder**: directory containing your .jxl files.
+
+The program will:
+- Decode JXL files to PNG format
+- Automatically optimize the PNG output using Oxipng for better compression
+- Show a warning about potential file size increase (JXL is more efficient than PNG)
+- Support all JXL color formats with automatic conversion to standard RGB PNG
 
 ## Notes
 
-- This tool never overwrites your original images, all compressed files are saved in a separate `output` folder.  
-- JPEG XL format is not widely supported. Depending on your operating system, you may need to install additional libraries or extensions to use JPEG XL. You may encounter issues, I recommend using this as a storage tool. However, you should be able to recover the original format using other tools.
-- Support for transparency might be broken, you will probably lose it and get a black background instead.
+- This tool never overwrites your original images, all processed files are saved in a separate `output` folder.  
+- **For JXL compression**: JPEG XL format is not widely supported. Depending on your operating system, you may need to install additional libraries or extensions to use JPEG XL. You may encounter issues, I recommend using this as a storage tool. However, you should be able to recover the original format using the JXL to PNG conversion feature or other tools.
+- **For JXL to PNG conversion**: Converting from JXL to PNG may result in larger file sizes as JXL is a more efficient format. The tool uses Oxipng to optimize the PNG output, but file sizes will typically be larger than the original JXL.
+- Support for transparency might be limited during JXL compression - you will probably lose it and get a black background instead. The JXL to PNG conversion handles transparency by converting RGBA to RGB.
 
